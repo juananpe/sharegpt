@@ -1,7 +1,7 @@
 let isRequesting = false;
 
-const API_URL = "https://sharegpt.com/api/conversations";
-const PAGE_URL = "https://sharegpt.com/c/";
+const API_URL = "http://localhost:3000/api/conversations";
+const PAGE_URL = "http://localhost:3000/c/";
 
 // const API_URL = "http://localhost:3000/api/conversations";
 // const PAGE_URL = "http://localhost:3000/c/";
@@ -10,9 +10,16 @@ function init() {
   const shareButton = createBtn();
 
   function appendShareButton() {
-    const buttonsWrapper = document.querySelector(
-      "#__next main form > div div:nth-of-type(1) > div"
-    );
+
+      let buttonsWrapper;
+
+      if (window.location.href.includes("openai")){
+         buttonsWrapper = document.querySelector(
+          "#__next main form > div div:nth-of-type(1) > div"
+        );
+      }else if (window.location.href.includes("anthropic")) {
+         buttonsWrapper = document.querySelector('main div.h-0.pb-10')
+      }
 
     console.log(buttonsWrapper);
 
@@ -21,18 +28,13 @@ function init() {
 
   appendShareButton();
 
-  const id = setInterval(() => {
-    if (
-      !document.querySelector("#export-button") ||
-      document.querySelector("#export-button").style.display === "none"
-    ) {
-      appendShareButton();
-    }
-  }, 500);
+  // show the model for chatgpt+ users
+    let model, chatGptPlusElement, isNotChatGptPlus;
 
-  const textareaElement = document.querySelector("#__next main form textarea");
 
-  const submitButton = textareaElement.nextElementSibling;
+  // const textareaElement = document.querySelector("#__next main form textarea");
+
+  // const submitButton = textareaElement.nextElementSibling;
 
   shareButton.addEventListener("click", async () => {
     if (isRequesting) return;
@@ -40,21 +42,25 @@ function init() {
     shareButton.textContent = "Sharing...";
     shareButton.style.cursor = "initial";
 
-    const threadContainer = document.getElementsByClassName(
-      "flex flex-col items-center text-sm dark:bg-gray-800"
-    )[0];
+    let threadContainer;
 
-    // show the model for chatgpt+ users
-    let model;
+    if (window.location.href.includes("openai")){
+        threadContainer = document.getElementsByClassName(
+          "flex flex-col items-center text-sm dark:bg-gray-800"
+        )[0];
+          chatGptPlusElement = document.querySelector(".gold-new-button");
+        isNotChatGptPlus =
+          chatGptPlusElement && chatGptPlusElement.innerText.includes("Upgrade");
 
-    const chatGptPlusElement = document.querySelector(".gold-new-button");
-    const isNotChatGptPlus =
-      chatGptPlusElement && chatGptPlusElement.innerText.includes("Upgrade");
+        if (!isNotChatGptPlus) {
+          const modelElement = threadContainer.firstChild;
+          model = modelElement.innerText;
+        }
 
-    if (!isNotChatGptPlus) {
-      const modelElement = threadContainer.firstChild;
-      model = modelElement.innerText;
+    } else if (window.location.href.includes("anthropic")) {
+        threadContainer = document.querySelectorAll('.ReactMarkdown');
     }
+
 
     const conversationData = {
       title: document.title,
@@ -63,32 +69,50 @@ function init() {
       items: [],
     };
 
-    for (const node of threadContainer.children) {
-      const markdown = node.querySelector(".markdown");
+    if (window.location.href.includes("openai")){
+        for (const node of threadContainer.children) {
+          const markdown = node.querySelector(".markdown");
 
-      // tailwind class indicates human or gpt
-      if ([...node.classList].includes("dark:bg-gray-800")) {
-        const warning = node.querySelector(".text-orange-500");
-        if (warning) {
-          conversationData.items.push({
-            from: "human",
-            value: warning.innerText.split("\n")[0],
-          });
-        } else {
-          const text = node.querySelector(".whitespace-pre-wrap");
-          conversationData.items.push({
-            from: "human",
-            value: text.textContent,
-          });
+          // tailwind class indicates human or gpt
+          if ([...node.classList].includes("dark:bg-gray-800")) {
+            const warning = node.querySelector(".text-orange-500");
+            if (warning) {
+              conversationData.items.push({
+                from: "human",
+                value: warning.innerText.split("\n")[0],
+              });
+            } else {
+              const text = node.querySelector(".whitespace-pre-wrap");
+              conversationData.items.push({
+                from: "human",
+                value: text.textContent,
+              });
+            }
+            // if it's a GPT response, it might contain code blocks
+          } else if (markdown) {
+            conversationData.items.push({
+              from: "gpt",
+              value: markdown.outerHTML,
+            });
+          }
         }
-        // if it's a GPT response, it might contain code blocks
-      } else if (markdown) {
-        conversationData.items.push({
-          from: "gpt",
-          value: markdown.outerHTML,
-        });
-      }
+    } else if (window.location.href.includes("anthropic")) {
+        for (const node of threadContainer) {
+         if ([...node.classList].includes("bg-ant-light")) {
+             conversationData.items.push({
+                from: "human",
+                value: node.innerText,
+              });
+         } else { // bg-claude-gray
+              conversationData.items.push({
+                from: "claude",
+                value: node.children[0].innerHTML,
+              });
+
+         }
+        }
     }
+
 
     const res = await fetch(API_URL, {
       body: JSON.stringify(conversationData),
@@ -164,4 +188,8 @@ function createBtn() {
   return button;
 }
 
-init();
+setTimeout( () => {
+
+    init();
+
+}, 5000)
